@@ -8,28 +8,26 @@ var taskManagerInstance *TaskManager
 var taskManagerOnce sync.Once
 
 type Task interface {
-	Execute()
+	Execute() error
 }
 
 type TaskManager struct {
-	taskList []Task
-	lock     sync.RWMutex
+	taskList chan Task
 }
 
 func GetTaskManager() *TaskManager {
 	taskManagerOnce.Do(func() {
 		if taskManagerInstance == nil {
-			taskManagerInstance = &TaskManager{}
+			taskManagerInstance = &TaskManager{
+				taskList: make(chan Task),
+			}
 		}
 	})
 	return taskManagerInstance
 }
 
-func (t *TaskManager) Push(task Task) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.taskList = append(t.taskList, task)
-	return nil
+func (t *TaskManager) AddTask(task Task) {
+	t.taskList <- task
 }
 
 func (t *TaskManager) ExecuteTasks() {
@@ -37,12 +35,12 @@ func (t *TaskManager) ExecuteTasks() {
 	// or make this function non-public and start this in a init() method
 	go func() {
 		for {
-			if len(t.taskList) > 0 {
-				t.lock.Lock()
-				task := t.taskList[0]
-				t.taskList = t.taskList[1:]
-				t.lock.Unlock()
-				task.Execute()
+			task := <-t.taskList
+			err := task.Execute()
+			if err != nil {
+				println("failed to execute task")
+			} else {
+				println("executed task")
 			}
 		}
 	}()
